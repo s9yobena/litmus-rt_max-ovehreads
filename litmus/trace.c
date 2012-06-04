@@ -1,10 +1,12 @@
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 
 #include <litmus/ftdev.h>
 #include <litmus/litmus.h>
 #include <litmus/trace.h>
+#include <litmus/max_trace.h>
 
 /******************************************************************************/
 /*                          Allocation                                        */
@@ -49,10 +51,81 @@ static inline void __save_timestamp_cpu(unsigned long event,
 					uint8_t type, uint8_t cpu)
 {
 	unsigned int seq_no;
-	struct timestamp *ts;
+	struct timestamp ts;
+	int mt_check_r;
+	struct timestamp *mt_start_ts;
+	struct timestamp *mt_end_ts;
+	
 	seq_no = fetch_and_inc((int *) &ts_seq_no);
+        
+        #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+		
+	/* prevent re-ordering of fetch_and_inc()  */	
+	barrier();
+
+	ts.event     = event;
+	ts.seq_no    = seq_no;
+	ts.cpu       = cpu;
+	ts.task_type = type;
+	__save_irq_flags(&ts);
+	barrier();
+	/* prevent re-ordering of ft_timestamp() */
+	ts.timestamp = ft_timestamp();
+	mt_check_r = mt_check(&ts);
+	/* printk(KERN_DEBUG "mt_check_r: %d \n", mt_check_r); */
+	if (mt_check_r > -1) {
+		printk(KERN_DEBUG "New maximum overhead %d \n",
+		       mt_get_overhead(mt_check_r));
+		printk(KERN_DEBUG "id of start ts is: %d \n", 
+		       mt_get_start_ts(mt_check_r)->event);
+		printk(KERN_DEBUG "timestamp of start ts is: %ul \n",
+		       (unsigned long)mt_get_start_ts(mt_check_r)->timestamp);
+		printk(KERN_DEBUG "id of end ts is: %d \n", 
+		       mt_get_end_ts(mt_check_r)->event);
+		printk(KERN_DEBUG "timestamp of end ts is: %ul \n", 
+		       (unsigned long)mt_get_end_ts(mt_check_r)->timestamp);
+			
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &mt_start_ts)) {
+			mt_start_ts->event      =  mt_get_start_ts(mt_check_r)->event;
+			mt_start_ts->seq_no     =  mt_get_start_ts(mt_check_r)->seq_no;
+			mt_start_ts->cpu        =  mt_get_start_ts(mt_check_r)->cpu;
+			mt_start_ts->task_type  =  mt_get_start_ts(mt_check_r)->task_type;
+			mt_start_ts->irq_flag   =  mt_get_start_ts(mt_check_r)->irq_flag;
+			mt_start_ts->irq_count  =  mt_get_start_ts(mt_check_r)->irq_count;
+			barrier();
+			/* prevent re-ordering of ft_timestamp() */
+			mt_start_ts->timestamp  = mt_get_start_ts(mt_check_r)->timestamp;
+			printk(KERN_DEBUG "writing timestamp with id: %d \n", 
+			       mt_start_ts->event);
+			ft_buffer_finish_write(trace_ts_buf, mt_start_ts);
+
+		} else
+			printk(KERN_DEBUG "Could not write start ts");
+
+		barrier();
+			
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &mt_end_ts)) {
+			mt_end_ts->event      =  mt_get_end_ts(mt_check_r)->event;
+			mt_end_ts->seq_no     =  mt_get_end_ts(mt_check_r)->seq_no;
+			mt_end_ts->cpu        =  mt_get_end_ts(mt_check_r)->cpu;
+			mt_end_ts->task_type  =  mt_get_end_ts(mt_check_r)->task_type;
+			mt_end_ts->irq_flag   =  mt_get_end_ts(mt_check_r)->irq_flag;
+			mt_end_ts->irq_count  =  mt_get_end_ts(mt_check_r)->irq_count;
+			barrier();
+			/* prevent re-ordering of ft_timestamp() */
+			mt_end_ts->timestamp = mt_get_end_ts(mt_check_r)->timestamp;
+			printk(KERN_DEBUG "writing timestamp with id: %d \n", 
+			       mt_end_ts->event);
+			ft_buffer_finish_write(trace_ts_buf, mt_end_ts);
+
+		} else
+			printk(KERN_DEBUG "Could not write start ts");			
+	}
+
+#else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
+
 	if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
-		ts->event     = event;
+	        ts->event     = event;
 		ts->seq_no    = seq_no;
 		ts->cpu       = cpu;
 		ts->task_type = type;
@@ -62,6 +135,7 @@ static inline void __save_timestamp_cpu(unsigned long event,
 		ts->timestamp = ft_timestamp();
 		ft_buffer_finish_write(trace_ts_buf, ts);
 	}
+#endif	
 }
 
 static void __add_timestamp_user(struct timestamp *pre_recorded)

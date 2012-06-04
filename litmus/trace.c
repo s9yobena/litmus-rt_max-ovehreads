@@ -51,11 +51,12 @@ static inline void __save_timestamp_cpu(unsigned long event,
 					uint8_t type, uint8_t cpu)
 {
 	unsigned int seq_no;
-	struct timestamp ts;
+	struct timestamp *ts;
+	struct timestamp mt_ts;
 	int mt_check_r;
 	struct timestamp *mt_start_ts;
 	struct timestamp *mt_end_ts;
-	
+
 	seq_no = fetch_and_inc((int *) &ts_seq_no);
         
         #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
@@ -63,26 +64,26 @@ static inline void __save_timestamp_cpu(unsigned long event,
 	/* prevent re-ordering of fetch_and_inc()  */	
 	barrier();
 
-	ts.event     = event;
-	ts.seq_no    = seq_no;
-	ts.cpu       = cpu;
-	ts.task_type = type;
-	__save_irq_flags(&ts);
+	mt_ts.event     = event;
+	mt_ts.seq_no    = seq_no;
+	mt_ts.cpu       = cpu;
+	mt_ts.task_type = type;
+	__save_irq_flags(&mt_ts);
 	barrier();
 	/* prevent re-ordering of ft_timestamp() */
-	ts.timestamp = ft_timestamp();
-	mt_check_r = mt_check(&ts);
+	mt_ts.timestamp = ft_timestamp();
+	mt_check_r = mt_check(&mt_ts);
 	/* printk(KERN_DEBUG "mt_check_r: %d \n", mt_check_r); */
 	if (mt_check_r > -1) {
-		printk(KERN_DEBUG "New maximum overhead %d \n",
-		       mt_get_overhead(mt_check_r));
+		printk(KERN_DEBUG "New maximum overhead %lu \n",
+		       (unsigned long)mt_get_overhead(mt_check_r));
 		printk(KERN_DEBUG "id of start ts is: %d \n", 
 		       mt_get_start_ts(mt_check_r)->event);
-		printk(KERN_DEBUG "timestamp of start ts is: %ul \n",
+		printk(KERN_DEBUG "timestamp of start ts is: %lu \n",
 		       (unsigned long)mt_get_start_ts(mt_check_r)->timestamp);
 		printk(KERN_DEBUG "id of end ts is: %d \n", 
 		       mt_get_end_ts(mt_check_r)->event);
-		printk(KERN_DEBUG "timestamp of end ts is: %ul \n", 
+		printk(KERN_DEBUG "timestamp of end ts is: %lu \n", 
 		       (unsigned long)mt_get_end_ts(mt_check_r)->timestamp);
 			
 		if (ft_buffer_start_write(trace_ts_buf, (void**)  &mt_start_ts)) {
@@ -125,7 +126,7 @@ static inline void __save_timestamp_cpu(unsigned long event,
 #else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
 
 	if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
-	        ts->event     = event;
+		ts->event     = event;
 		ts->seq_no    = seq_no;
 		ts->cpu       = cpu;
 		ts->task_type = type;

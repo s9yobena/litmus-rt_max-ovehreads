@@ -2,7 +2,7 @@
 #include <litmus/trace.h>
 #include <linux/spinlock.h>
 
-#define MAX_ENTRIES 1
+#define MAX_ENTRIES 20
 
 enum overhead_state {
 	WAIT_FOR_START,
@@ -13,6 +13,7 @@ struct max_overhead {
 	enum overhead_state state;
   	uint8_t start_id;
 	uint8_t end_id;
+	uint8_t cpu_id;
 	struct timestamp start_ts;
 	struct timestamp end_ts;
 	struct timestamp curr_ts;
@@ -25,11 +26,12 @@ DEFINE_SPINLOCK(mt_table_lock);
 static unsigned cur_size = 0;
 
 
-static inline void add_entry (unsigned start_id, unsigned end_id)
+static inline void add_entry (unsigned start_id, unsigned end_id, unsigned cpu_id)
 {
 	max_overhead_table[cur_size].state = WAIT_FOR_START;
 	max_overhead_table[cur_size].start_id = start_id;
 	max_overhead_table[cur_size].end_id = end_id;
+	max_overhead_table[cur_size].cpu_id = cpu_id;
 	max_overhead_table[cur_size].value = 0;
 	cur_size += 1;
 }
@@ -40,8 +42,9 @@ static inline int is_registered(struct timestamp* ts)
 
 	for (i = 0; i < cur_size; i++) {
 
-		if ((ts->event == max_overhead_table[i].start_id)
-		    ||(ts->event == max_overhead_table[i].end_id)) {
+		if (((ts->event == max_overhead_table[i].start_id)
+		     ||(ts->event == max_overhead_table[i].end_id))
+		    && ts->cpu == max_overhead_table[i].cpu_id) {
 			
 			return 1;
 		} 
@@ -61,7 +64,7 @@ static inline int register_ts(struct timestamp* ts)
 {	
 	/* we only regiser start events */
 	if (is_start(ts)) {
-		add_entry(ts->event, ts->event+1);
+		add_entry(ts->event, ts->event+1, ts->cpu);
 		return 0;
 	}
 	return 1;
@@ -73,9 +76,10 @@ static inline int get_ts_idx(struct timestamp *ts)
 	
 	for (i = 0; i < cur_size; i++) {
 
-		if ((ts->event == max_overhead_table[i].start_id)
-		    ||(ts->event == max_overhead_table[i].end_id)) {
-			
+		if (((ts->event == max_overhead_table[i].start_id)
+		     ||(ts->event == max_overhead_table[i].end_id))
+		    &&(ts->cpu == max_overhead_table[i].cpu_id)) {
+
 			return i;
 		} 
 	}
@@ -85,19 +89,21 @@ static inline int get_ts_idx(struct timestamp *ts)
 	return -1;
 }
 
+/* BUG: handle diffrent cpus */
 static inline int update_max_overhead_table(struct timestamp *ts)
 {
 	int ts_idx;	
 	unsigned long curr_max;
-
+	
 	ts_idx = get_ts_idx(ts);
 
 	/* prevent re-ordering of ts_idx = ... */
 	barrier();
 	
 	// Check if we are in WAIT_FOR_START_EVENT state; store the timestamp ts
-	if ( (max_overhead_table[ts_idx].state == WAIT_FOR_START) && 
-	     (ts->event == max_overhead_table[ts_idx].start_id)) {
+	if ( (max_overhead_table[ts_idx].state == WAIT_FOR_START)
+	     &&(ts->event == max_overhead_table[ts_idx].start_id)
+	     &&(ts->cpu == max_overhead_table[ts_idx].cpu_id)) {
 
 		max_overhead_table[ts_idx].state = WAIT_FOR_MATCH;
 		max_overhead_table[ts_idx].start_ts = *ts;
@@ -109,6 +115,7 @@ static inline int update_max_overhead_table(struct timestamp *ts)
 	// after currentTimestamp and set currentTimestamp to ts
 	else if ((max_overhead_table[ts_idx].curr_ts.event == max_overhead_table[ts_idx].start_id)
 		 &&( ts->event == max_overhead_table[ts_idx].start_id)
+		 &&(ts->cpu == max_overhead_table[ts_idx].cpu_id)
 		 &&(max_overhead_table[ts_idx].curr_ts.seq_no < ts->seq_no)) {
 
 		max_overhead_table[ts_idx].state = WAIT_FOR_MATCH;
@@ -123,6 +130,7 @@ static inline int update_max_overhead_table(struct timestamp *ts)
 	// generate a new overhead value
 	else if ((max_overhead_table[ts_idx].curr_ts.event == max_overhead_table[ts_idx].start_id)
 		 &&(ts->event == max_overhead_table[ts_idx].end_id)
+		 &&(ts->cpu == max_overhead_table[ts_idx].cpu_id)
 		 &&(ts->task_type == TSK_RT)
 		 &&(max_overhead_table[ts_idx].curr_ts.seq_no < ts->seq_no)) {
 			
@@ -149,15 +157,19 @@ static inline int update_max_overhead_table(struct timestamp *ts)
  */
 inline int mt_check(struct timestamp* ts)
 {
+	int update_r;
   	unsigned long lock_flags;
 	spin_lock_irqsave(&mt_table_lock, lock_flags);
+
 	if (is_registered(ts)) {
+		update_r = update_max_overhead_table(ts);
 		spin_unlock_irqrestore(&mt_table_lock, lock_flags);
-		return update_max_overhead_table(ts);
+		return update_r;
 	} else {
 		register_ts(ts);
+		update_r = update_max_overhead_table(ts);
 		spin_unlock_irqrestore(&mt_table_lock, lock_flags);
-		return update_max_overhead_table(ts);
+		return update_r;
 	}	
 }
 

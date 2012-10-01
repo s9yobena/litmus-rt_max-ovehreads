@@ -7,10 +7,8 @@
 
 struct timestamp;
 
-inline int mt_check(struct timestamp*);
-inline struct timestamp* mt_get_start_ts (int);
-inline struct timestamp* mt_get_end_ts (int idx);
-inline uint64_t mt_get_overhead(int);
+inline void init_max_sched_overhead_trace(void);
+inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct timestamp *_end_ts );
 
 #else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
 

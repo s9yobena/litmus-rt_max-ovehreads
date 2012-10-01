@@ -23,9 +23,17 @@ struct max_overhead {
 	spinlock_t spinlock;
 };
 
+struct max_latency {
+	uint64_t value;       
+	spinlock_t spinlock;
+};
+
 static DEFINE_PER_CPU(struct max_overhead[MAX_ENTRIES], _max_overhead_table);
 #define max_overhead_table(idx) (__get_cpu_var(_max_overhead_table[(idx)]))
 #define max_overhead_table_for(idx,cpu_id) (per_cpu(_max_overhead_table[(idx)], cpu_id))
+
+static DEFINE_PER_CPU(struct max_latency, _max_latency);
+#define max_latency_for(cpu_id) (per_cpu(_max_latency, cpu_id))
 
 static DEFINE_PER_CPU(unsigned, _curr_size);
 #define curr_size (__get_cpu_var(_curr_size))
@@ -56,6 +64,9 @@ inline void init_max_sched_overhead_trace(void) {
 			       smp_processor_id());
 
 		}
+
+		max_latency_for(cpu).value = 0;
+		spin_lock_init(&max_latency_for(cpu).spinlock);
 	}
 }
 
@@ -198,5 +209,19 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 	}
 
 	return update_r;
+}
+
+inline int  mt_latency_check(struct timestamp *mt_ts) {
+
+	unsigned long lock_flags;
+	spin_lock_irqsave(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
+	
+	if (mt_ts->timestamp > max_latency_for(mt_ts->cpu).value) {
+		spin_unlock_irqrestore(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
+		return 1;
+	} else {
+		spin_unlock_irqrestore(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);	
+		return -1;
+	}
 }
 

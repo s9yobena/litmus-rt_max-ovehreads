@@ -188,6 +188,42 @@ feather_callback void save_timestamp_cpu(unsigned long event,
 feather_callback void save_task_latency(unsigned long event,
 					unsigned long when_ptr)
 {
+        #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+	
+	lt_t now = litmus_clock();
+	lt_t *when = (lt_t*) when_ptr;
+	unsigned int seq_no;
+	int cpu = raw_smp_processor_id();
+	struct timestamp *ts;
+	struct timestamp mt_ts;
+	int mt_check_r;
+
+	seq_no = fetch_and_inc((int *) &ts_seq_no);
+	barrier();
+	mt_ts.event     = event;
+	mt_ts.timestamp = now - *when;
+	mt_ts.seq_no    = seq_no;
+	mt_ts.cpu       = cpu;
+	mt_ts.task_type = TSK_RT;
+	__save_irq_flags(&mt_ts);
+	
+	barrier();
+	mt_check_r = mt_latency_check(&mt_ts);
+	if (mt_check_r > -1) {
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
+			ts->event      = mt_ts.event;
+			ts->timestamp  = mt_ts.timestamp;
+			ts->seq_no     = mt_ts.seq_no;
+			ts->cpu        = mt_ts.cpu;
+			ts->task_type  = mt_ts.task_type;
+			ts->irq_flag   = mt_ts.irq_flag;
+			ts->irq_count  = mt_ts.irq_count;
+			ft_buffer_finish_write(trace_ts_buf, ts);
+		}
+	}
+
+        #else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
+
 	lt_t now = litmus_clock();
 	lt_t *when = (lt_t*) when_ptr;
 	unsigned int seq_no;
@@ -204,6 +240,7 @@ feather_callback void save_task_latency(unsigned long event,
 		__save_irq_flags(ts);
 		ft_buffer_finish_write(trace_ts_buf, ts);
 	}
+        #endif
 }
 
 /******************************************************************************/

@@ -20,15 +20,12 @@ struct max_overhead {
 	struct timestamp end_ts;
 	struct timestamp curr_ts;
 	uint64_t value;       
+	spinlock_t spinlock;
 };
 
 static DEFINE_PER_CPU(struct max_overhead[MAX_ENTRIES], _max_overhead_table);
 #define max_overhead_table(idx) (__get_cpu_var(_max_overhead_table[(idx)]))
 #define max_overhead_table_for(idx,cpu_id) (per_cpu(_max_overhead_table[(idx)], cpu_id))
-
-static DEFINE_PER_CPU(spinlock_t, _mt_table_lock);
-#define mt_table_lock  (&__get_cpu_var(_mt_table_lock))
-#define mt_table_lock_for(cpu_id) (&per_cpu(_mt_table_lock, cpu_id))
 
 static DEFINE_PER_CPU(unsigned, _curr_size);
 #define curr_size (__get_cpu_var(_curr_size))
@@ -40,7 +37,6 @@ inline void init_max_sched_overhead_trace(void) {
 	static int start_ids[] = {100, 102, 104, 106, 110, 190};
 	for_each_online_cpu(cpu) {
 
-		spin_lock_init(mt_table_lock_for(cpu));
 		curr_size_for(cpu) = 0;
 		for (i = 0; i < sizeof(start_ids) / sizeof(start_ids[0]); i++) {
 
@@ -49,6 +45,8 @@ inline void init_max_sched_overhead_trace(void) {
 			max_overhead_table_for(curr_size_for(cpu), cpu).end_id = start_ids[i]+1;
 			max_overhead_table_for(curr_size_for(cpu), cpu).cpu_id = cpu;
 			max_overhead_table_for(curr_size_for(cpu), cpu).value = 0;
+			spin_lock_init(&max_overhead_table_for(curr_size_for(cpu), cpu).spinlock);
+			
 			curr_size_for(cpu) += 1;
 
 			TRACE(KERN_INFO "add_entry with start_id %d, end_id %d, cpu_id %d, executing on cpu %d \n",
@@ -105,8 +103,12 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 {
 	int ts_idx;	
 	unsigned long curr_max;
+	unsigned long lock_flags;
+
 	
 	ts_idx = get_ts_idx(ts, cpu_id);
+
+	spin_lock_irqsave(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 
 	/* prevent re-ordering of ts_idx = ... */
 	barrier();
@@ -119,6 +121,8 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
+		
+		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 		return -1;
 	}
         // Here currentTimestamp contains a start event and ts 
@@ -132,6 +136,8 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
+
+		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 		return -1;
 	}
 
@@ -166,10 +172,13 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		if ( curr_max > max_overhead_table_for(ts_idx, cpu_id).value) {
 
 			max_overhead_table_for(ts_idx, cpu_id).value = curr_max;
+			spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 			return ts_idx;
 		}
+		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 		return -1;
 	}
+	spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
 	return -1;
 }
 
@@ -180,8 +189,6 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 {
 
 	int update_r;
-  	unsigned long lock_flags;
-	spin_lock_irqsave(mt_table_lock_for(ts->cpu), lock_flags);
 
 	update_r = update_max_overhead_table(ts, ts->cpu);
 
@@ -190,8 +197,6 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts;
 	}
 
-	spin_unlock_irqrestore(mt_table_lock_for(ts->cpu), lock_flags);
-	
 	return update_r;
 }
 

@@ -226,6 +226,17 @@ feather_callback void do_sched_trace_sys_release(unsigned long id,
 	}
 }
 
+feather_callback void do_sched_trace_task_termination(unsigned long id,
+						 unsigned long _task)
+{
+	struct task_struct *t = (struct task_struct*) _task;
+	struct st_event_record* rec = get_record(ST_TERMINATION, t);
+	if (rec) {
+		rec->data.termination.when    = now();
+		put_record(rec);
+	}
+}
+
 feather_callback void do_sched_trace_action(unsigned long id,
 					    unsigned long _task,
 					    unsigned long action)

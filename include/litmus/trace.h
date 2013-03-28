@@ -84,8 +84,15 @@ feather_callback void save_task_latency(unsigned long event, unsigned long when_
 #define TS_RELEASE_START		DTIMESTAMP(106, TSK_RT)
 #define TS_RELEASE_END			DTIMESTAMP(107, TSK_RT)
 
+<<<<<<< HEAD
 #define TS_TICK_START(t)		TTIMESTAMP(110, t)
 #define TS_TICK_END(t) 			TTIMESTAMP(111, t)
+=======
+#define TS_TICK_START_EVENT             110
+#define TS_TICK_END_EVENT               111
+#define TS_TICK_START(t)		TTIMESTAMP(TS_TICK_START_EVENT, t)
+#define TS_TICK_END(t) 			TTIMESTAMP(TS_TICK_END_EVENT, t)
+>>>>>>> 65df9c3a6d10dfc8f15c88dcce93dada7de52c8f
 
 
 #define TS_PLUGIN_SCHED_START		/* TIMESTAMP(120) */  /* currently unused */
@@ -108,8 +115,10 @@ feather_callback void save_task_latency(unsigned long event, unsigned long when_
 #define TS_UNLOCK_START			TIMESTAMP(180)
 #define TS_UNLOCK_END			TIMESTAMP(181)
 
-#define TS_SEND_RESCHED_START(c)	CTIMESTAMP(190, c)
-#define TS_SEND_RESCHED_END		DTIMESTAMP(191, TSK_UNKNOWN)
+#define TS_SEND_RESCHED_START_EVENT     190
+#define TS_SEND_RESCHED_END_EVENT       191
+#define TS_SEND_RESCHED_START(c)	CTIMESTAMP(TS_SEND_RESCHED_START_EVENT, c)
+#define TS_SEND_RESCHED_END		DTIMESTAMP(TS_SEND_RESCHED_END_EVENT, TSK_UNKNOWN)
 
 #define TS_RELEASE_LATENCY(when)	LTIMESTAMP(208, &(when))
 

@@ -146,6 +146,14 @@ config SCHED_OVERHEAD_TRACE
 	  Export event stream for overhead tracing.
 	  Say Yes for overhead tracing.
 
+config MAX_SCHED_OVERHEAD_TRACE
+	bool "Only record timestamps corresponding to maximum overheads"
+	depends on SCHED_OVERHEAD_TRACE
+	default n
+	help
+	  Export event stream corresponding to maximum overheads.
+	  Say Yes for maximum overhead tracing.
+
 config SCHED_DEBUG_TRACE
 	bool "TRACE() debugging"
 	default y

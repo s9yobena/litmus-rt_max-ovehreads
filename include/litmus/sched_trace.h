@@ -80,6 +80,11 @@ struct st_sys_release_data {
 	u64	release;
 };
 
+struct st_termination_data {		/* A task terminates execution. */
+	u64	when;
+	u64	__unused;
+};
+
 #define DATA(x) struct st_ ## x ## _data x;
 
 typedef enum {
@@ -94,7 +99,8 @@ typedef enum {
 	ST_BLOCK,
 	ST_RESUME,
 	ST_ACTION,
-	ST_SYS_RELEASE
+	ST_SYS_RELEASE,
+	ST_TERMINATION
 } st_event_record_type_t;
 
 struct st_event_record {
@@ -113,6 +119,7 @@ struct st_event_record {
 		DATA(resume);
 		DATA(action);
 		DATA(sys_release);
+	        DATA(termination);
 	} data;
 };
 
@@ -155,6 +162,9 @@ feather_callback void do_sched_trace_action(unsigned long id,
 feather_callback void do_sched_trace_sys_release(unsigned long id,
 						 lt_t* start);
 
+feather_callback void do_sched_trace_task_termination(unsigned long id,
+						 struct task_struct* task);
+
 #endif
 
 #else
@@ -192,6 +202,8 @@ feather_callback void do_sched_trace_sys_release(unsigned long id,
 #define sched_trace_sys_release(when) \
 	SCHED_TRACE(SCHED_TRACE_BASE_ID + 10, do_sched_trace_sys_release, when)
 
+#define sched_trace_task_termination(t) \
+	SCHED_TRACE(SCHED_TRACE_BASE_ID + 11, do_sched_trace_task_termination, t)
 
 #define sched_trace_quantum_boundary() /* NOT IMPLEMENTED */
 

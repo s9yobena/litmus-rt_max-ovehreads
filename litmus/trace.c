@@ -1,10 +1,12 @@
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 
 #include <litmus/ftdev.h>
 #include <litmus/litmus.h>
 #include <litmus/trace.h>
+#include <litmus/max_trace.h>
 
 /******************************************************************************/
 /*                          Allocation                                        */
@@ -48,6 +50,81 @@ static inline void __save_irq_flags(struct timestamp *ts)
 static inline void __save_timestamp_cpu(unsigned long event,
 					uint8_t type, uint8_t cpu)
 {
+        #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+
+	unsigned int seq_no;
+	struct timestamp *ts;
+	struct timestamp mt_ts;
+	int mt_check_r;
+	struct timestamp mt_start_ts;
+	struct timestamp mt_end_ts;
+
+	seq_no = fetch_and_inc((int *) &ts_seq_no);
+
+	/* prevent re-ordering of fetch_and_inc()  */	
+	barrier();
+
+	mt_ts.event     = event;
+	mt_ts.seq_no    = seq_no;
+	mt_ts.cpu       = cpu;
+	mt_ts.task_type = type;
+	__save_irq_flags(&mt_ts);
+	barrier();
+	/* prevent re-ordering of ft_timestamp() */
+	mt_ts.timestamp = ft_timestamp();
+	
+	/* check for maxima */
+	mt_check_r = mt_check(&mt_ts, &mt_start_ts, &mt_end_ts);
+
+	if (mt_check_r > -1) {
+		TRACE(KERN_INFO "New maximum overhead %lu \n",
+		       (unsigned long)(mt_end_ts.timestamp - mt_start_ts.timestamp));
+		TRACE(KERN_INFO "id of start ts is: %d \n",
+		      mt_start_ts.event);
+		TRACE(KERN_INFO "timestamp of start ts is: %lu \n",
+		      (unsigned long)mt_start_ts.timestamp);
+		TRACE(KERN_INFO "id of end ts is: %d \n",
+		      mt_end_ts.event);
+		TRACE(KERN_INFO "timestamp of end ts is: %lu \n",
+		       (unsigned long)mt_end_ts.timestamp);
+		/* mt_get_pair_ts(mt_check_r, cpu, &mt_start_ts, &mt_end_ts); */
+		barrier();
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
+			ts->event      =  mt_start_ts.event;
+			ts->seq_no     =  mt_start_ts.seq_no;
+			ts->cpu        =  mt_start_ts.cpu;
+			ts->task_type  =  mt_start_ts.task_type;
+			ts->irq_flag   =  mt_start_ts.irq_flag;
+			ts->irq_count  =  mt_start_ts.irq_count;
+			ts->timestamp  = mt_start_ts.timestamp;
+			TRACE(KERN_DEBUG "writing timestamp with id: %d \n", 
+			       ts->event);
+			ft_buffer_finish_write(trace_ts_buf, ts);
+
+		} else
+			printk(KERN_DEBUG "Could not write start ts");
+
+		barrier();
+
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
+			ts->event      =  mt_end_ts.event;
+			ts->seq_no     =  mt_end_ts.seq_no;
+			ts->cpu        =  mt_end_ts.cpu;
+			ts->task_type  =  mt_end_ts.task_type;
+			ts->irq_flag   =  mt_end_ts.irq_flag;
+			ts->irq_count  =  mt_end_ts.irq_count;
+			ts->timestamp  = mt_end_ts.timestamp;
+			TRACE(KERN_DEBUG "writing timestamp with id: %d \n", 
+			       ts->event);
+			ft_buffer_finish_write(trace_ts_buf, ts);
+
+		} else
+			TRACE(KERN_DEBUG "Could not write end ts");
+			
+	}
+
+#else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
+
 	unsigned int seq_no;
 	struct timestamp *ts;
 	seq_no = fetch_and_inc((int *) &ts_seq_no);
@@ -62,6 +139,8 @@ static inline void __save_timestamp_cpu(unsigned long event,
 		ts->timestamp = ft_timestamp();
 		ft_buffer_finish_write(trace_ts_buf, ts);
 	}
+
+#endif	
 }
 
 static void __add_timestamp_user(struct timestamp *pre_recorded)
@@ -110,6 +189,42 @@ feather_callback void save_timestamp_cpu(unsigned long event,
 feather_callback void save_task_latency(unsigned long event,
 					unsigned long when_ptr)
 {
+        #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+	
+	lt_t now = litmus_clock();
+	lt_t *when = (lt_t*) when_ptr;
+	unsigned int seq_no;
+	int cpu = raw_smp_processor_id();
+	struct timestamp *ts;
+	struct timestamp mt_ts;
+	int mt_check_r;
+
+	seq_no = fetch_and_inc((int *) &ts_seq_no);
+	barrier();
+	mt_ts.event     = event;
+	mt_ts.timestamp = now - *when;
+	mt_ts.seq_no    = seq_no;
+	mt_ts.cpu       = cpu;
+	mt_ts.task_type = TSK_RT;
+	__save_irq_flags(&mt_ts);
+	
+	barrier();
+	mt_check_r = mt_latency_check(&mt_ts);
+	if (mt_check_r > -1) {
+		if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {
+			ts->event      = mt_ts.event;
+			ts->timestamp  = mt_ts.timestamp;
+			ts->seq_no     = mt_ts.seq_no;
+			ts->cpu        = mt_ts.cpu;
+			ts->task_type  = mt_ts.task_type;
+			ts->irq_flag   = mt_ts.irq_flag;
+			ts->irq_count  = mt_ts.irq_count;
+			ft_buffer_finish_write(trace_ts_buf, ts);
+		}
+	}
+
+        #else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
+
 	lt_t now = litmus_clock();
 	lt_t *when = (lt_t*) when_ptr;
 	unsigned int seq_no;
@@ -126,6 +241,7 @@ feather_callback void save_task_latency(unsigned long event,
 		__save_irq_flags(ts);
 		ft_buffer_finish_write(trace_ts_buf, ts);
 	}
+        #endif
 }
 
 /******************************************************************************/
@@ -189,7 +305,12 @@ static int __init init_ft_overhead_trace(void)
 {
 	int err, cpu;
 
-	printk("Initializing Feather-Trace overhead tracing device.\n");
+	TRACE("Initializing Feather-Trace overhead tracing device.\n");
+#ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+	TRACE(KERN_DEBUG "initialized max tracing###################################################");
+	init_max_sched_overhead_trace();
+#endif
+
 	err = ftdev_init(&overhead_dev, THIS_MODULE, 1, "ft_trace");
 	if (err)
 		goto err_out;

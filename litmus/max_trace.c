@@ -45,7 +45,13 @@ static DEFINE_PER_CPU(unsigned, _curr_size);
 inline void init_max_sched_overhead_trace(void) {
 	int cpu;
 	int i;
-	static int start_ids[] = {100, 102, 104, 106, 110, 190};
+	static int start_ids[] = {TS_SCHED_START_EVENT, 
+				  TS_SCHED2_START_EVENT,
+				  TS_CXS_START_EVENT,
+				  TS_RELEASE_START_EVENT,
+				  TS_TICK_START_EVENT,
+				  TS_SEND_RESCHED_START_EVENT};
+	
 	for_each_online_cpu(cpu) {
 
 		curr_size_for(cpu) = 0;
@@ -72,9 +78,14 @@ inline void init_max_sched_overhead_trace(void) {
 		spin_lock_init(&max_latency_for(cpu).spinlock);
 	}
 
-	max_overheads.cxs = 05;
-	max_overheads.sched = 03;
-	max_overheads.sched2 = 1989;
+	max_overheads.cxs = 0;
+	max_overheads.sched = 0;
+	max_overheads.sched2 = 0;
+	max_overheads.release = 0;
+	max_overheads.send_resched = 0;
+	max_overheads.release_latency = 0;
+	max_overheads.tick = 0;
+
 	spin_lock_init(&max_overheads_spinlock);
 }
 
@@ -256,7 +267,7 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 			}
 			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
 			break;
-		
+			
 		case TS_SEND_RESCHED_START_EVENT: 
 			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
 			if (max_overheads.send_resched < _end_ts->timestamp - _start_ts->timestamp) {
@@ -264,6 +275,15 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 			}
 			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
 			break;
+
+		case TS_TICK_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			if (max_overheads.tick < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.tick = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+
 
 		default:
 			break;

@@ -1,6 +1,6 @@
 #include <litmus/max_trace.h> 
 #include <litmus/trace.h>
-#include <linux/spinlock.h>
+
 #include <linux/percpu.h>
 #include <litmus/debug_trace.h>
 
@@ -27,6 +27,9 @@ struct max_latency {
 	uint64_t value;       
 	spinlock_t spinlock;
 };
+
+struct max_overheads_t max_overheads;
+spinlock_t max_overheads_spinlock;
 
 static DEFINE_PER_CPU(struct max_overhead[MAX_ENTRIES], _max_overhead_table);
 #define max_overhead_table(idx) (__get_cpu_var(_max_overhead_table[(idx)]))
@@ -68,6 +71,11 @@ inline void init_max_sched_overhead_trace(void) {
 		max_latency_for(cpu).value = 0;
 		spin_lock_init(&max_latency_for(cpu).spinlock);
 	}
+
+	max_overheads.cxs = 05;
+	max_overheads.sched = 03;
+	max_overheads.sched2 = 1989;
+	spin_lock_init(&max_overheads_spinlock);
 }
 
 static inline void print_all_entries(void) {
@@ -200,12 +208,68 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 {
 
 	int update_r;
+	unsigned long lock_flags;
 
 	update_r = update_max_overhead_table(ts, ts->cpu);
 
 	if (update_r > -1) {
 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts;
 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts;
+	
+
+		switch (_start_ts->event) {
+		
+		case TS_SCHED_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			/* Although we know _start_ts and _end_ts correspond to 
+			 * a maximum value, we need to further add this check to make			
+			 * the per-cpu max overhead value, which _start_ts and _end_ts
+			 * correspond to, is still the global maximum overhead value
+			 * (i.e., among all CPUs).		       
+			 */
+			if (max_overheads.sched < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.sched = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+
+		case TS_SCHED2_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			if (max_overheads.sched2 < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.sched2 = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+
+		case TS_CXS_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			if (max_overheads.cxs < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.cxs = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+
+		case TS_RELEASE_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			if (max_overheads.release < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.release = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+		
+		case TS_SEND_RESCHED_START_EVENT: 
+			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+			if (max_overheads.send_resched < _end_ts->timestamp - _start_ts->timestamp) {
+				max_overheads.send_resched = _end_ts->timestamp - _start_ts->timestamp;
+			}
+			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+			break;
+
+		default:
+			break;
+
+		}
+
 	}
 
 	return update_r;
@@ -217,6 +281,13 @@ inline int  mt_latency_check(struct timestamp *mt_ts) {
 	spin_lock_irqsave(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
 	
 	if (mt_ts->timestamp > max_latency_for(mt_ts->cpu).value) {
+		
+		spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
+		if (max_overheads.release_latency < mt_ts->timestamp) {
+			max_overheads.release_latency = mt_ts->timestamp;
+		}
+		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+	
 		spin_unlock_irqrestore(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
 		return 1;
 	} else {

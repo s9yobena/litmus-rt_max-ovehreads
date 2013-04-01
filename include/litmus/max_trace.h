@@ -2,8 +2,22 @@
 #define	_SYS_MAX_TRACE_H_
 
 #include <linux/types.h>
+#include <linux/spinlock.h>
 
 #ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+
+struct max_overheads_t {
+	uint64_t cxs;
+	uint64_t sched;
+	uint64_t sched2;
+	uint64_t release;
+	uint64_t send_resched;
+  	uint64_t release_latency;
+	uint64_t tick;
+};
+
+extern struct max_overheads_t max_overheads;
+extern spinlock_t max_overheads_spinlock;
 
 struct timestamp;
 

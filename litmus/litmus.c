@@ -399,12 +399,8 @@ out:
 void litmus_exit_task(struct task_struct* tsk)
 {
 	if (is_realtime(tsk)) {
-<<<<<<< HEAD
-		sched_trace_task_completion(tsk, 1);
-=======
 		sched_trace_task_completion(tsk, 1); /* for job completion */
 		sched_trace_task_termination(tsk); /* for task terminatation */
->>>>>>> 0e4fd39131a7dab72e0bbd51bd059ec7cf0f3ac2
 
 		litmus->task_exit(tsk);
 

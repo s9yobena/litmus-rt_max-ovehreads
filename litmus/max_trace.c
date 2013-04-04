@@ -4,6 +4,8 @@
 #include <linux/percpu.h>
 #include <litmus/debug_trace.h>
 
+#include <asm/atomic.h>
+
 #define MAX_ENTRIES 10
 
 enum overhead_state {
@@ -41,6 +43,8 @@ static DEFINE_PER_CPU(struct max_latency, _max_latency);
 static DEFINE_PER_CPU(unsigned, _curr_size);
 #define curr_size (__get_cpu_var(_curr_size))
 #define curr_size_for(cpu_id) (per_cpu(_curr_size, cpu_id))
+
+static unsigned int last_seqno = 0; /* Used to check for holes in event streams */
 
 inline void init_max_sched_overhead_trace(void) {
 	int cpu;
@@ -148,6 +152,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 	     &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 	     &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)) {
 
+		atomic_set((atomic_t*)&last_seqno, 0);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
@@ -163,6 +168,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		 &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		 &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)) {
 
+		atomic_set((atomic_t*)&last_seqno, 0);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
@@ -179,7 +185,10 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
 		  &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		  &&(ts->task_type == TSK_RT)
-		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no))
+		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)
+		   &&(		/* This conditions makes sure we are not going through a hole */
+		      (!atomic_read((atomic_t*)&last_seqno))
+		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
 		 ||
 		 ((max_overhead_table_for(ts_idx, cpu_id).curr_ts.event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
@@ -189,8 +198,12 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		     || ts->event == TS_SEND_RESCHED_END_EVENT
 		     || ts->event == TS_TICK_START_EVENT
 		     || ts->event == TS_TICK_END_EVENT)
-		  )) {
-			
+		  &&(		/* This conditions makes sure we are not going through a hole */
+		      (!atomic_read((atomic_t*)&last_seqno))
+		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
+		  ))) {
+		
+		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
 		max_overhead_table_for(ts_idx, cpu_id).end_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_START;
 		barrier();

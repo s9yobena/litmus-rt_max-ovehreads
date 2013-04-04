@@ -152,7 +152,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 	     &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 	     &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)) {
 
-		atomic_set((atomic_t*)&last_seqno, 0);
+		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
@@ -168,7 +168,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		 &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		 &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)) {
 
-		atomic_set((atomic_t*)&last_seqno, 0);
+		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
@@ -187,8 +187,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		  &&(ts->task_type == TSK_RT)
 		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)
 		   &&(		/* This conditions makes sure we are not going through a hole */
-		      (!atomic_read((atomic_t*)&last_seqno))
-		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
+		      atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no)
 		 ||
 		 ((max_overhead_table_for(ts_idx, cpu_id).curr_ts.event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
@@ -199,8 +198,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		     || ts->event == TS_TICK_START_EVENT
 		     || ts->event == TS_TICK_END_EVENT)
 		  &&(		/* This conditions makes sure we are not going through a hole */
-		      (!atomic_read((atomic_t*)&last_seqno))
-		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
+		     atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no)
 		  ))) {
 		
 		atomic_set((atomic_t*)&last_seqno, ts->seq_no);

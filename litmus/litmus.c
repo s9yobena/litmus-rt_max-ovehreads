@@ -293,13 +293,21 @@ asmlinkage long sys_null_call(cycles_t __user *ts)
 /*
  * Getter of system maximum overhead values
  *   returns EFAULT if copying of parameters has failed.
+ *   returns ENOSYS if max-overhead-tracing is not enabled
+ *   returns 0 if sucess
  *
  */
 asmlinkage long sys_get_max_overheads(struct max_overheads_t __user * param)
-{
+{	
 	int retval = -EINVAL;
+
+#ifdef CONFIG_MAX_SCHED_OVERHEAD_TRACE
+
 	struct max_overheads_t lp;
 	unsigned long lock_flags;
+
+	if (param == 0)
+		goto out;
 
 	spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
 	lp = max_overheads;
@@ -307,6 +315,13 @@ asmlinkage long sys_get_max_overheads(struct max_overheads_t __user * param)
 
 	retval =
 	    copy_to_user(param, &lp, sizeof(lp)) ? -EFAULT : 0;
+	
+
+#else /* !CONFIG_MAX_SCHED_OVERHEAD_TRACE */
+	
+	retval = -ENOSYS;
+#endif
+        out:
 	return retval;
 }
 

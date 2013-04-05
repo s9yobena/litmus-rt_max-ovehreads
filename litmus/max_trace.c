@@ -22,12 +22,10 @@ struct max_overhead {
 	struct timestamp end_ts;
 	struct timestamp curr_ts;
 	uint64_t value;       
-	spinlock_t spinlock;
 };
 
 struct max_latency {
 	uint64_t value;       
-	spinlock_t spinlock;
 };
 
 struct max_overheads_t max_overheads;
@@ -66,8 +64,7 @@ inline void init_max_sched_overhead_trace(void) {
 			max_overhead_table_for(curr_size_for(cpu), cpu).end_id = start_ids[i]+1;
 			max_overhead_table_for(curr_size_for(cpu), cpu).cpu_id = cpu;
 			max_overhead_table_for(curr_size_for(cpu), cpu).value = 0;
-			spin_lock_init(&max_overhead_table_for(curr_size_for(cpu), cpu).spinlock);
-			
+						
 			curr_size_for(cpu) += 1;
 
 			TRACE(KERN_INFO "add_entry with start_id %d, end_id %d, cpu_id %d, executing on cpu %d \n",
@@ -79,7 +76,7 @@ inline void init_max_sched_overhead_trace(void) {
 		}
 
 		max_latency_for(cpu).value = 0;
-		spin_lock_init(&max_latency_for(cpu).spinlock);
+		/* spin_lock_init(&max_latency_for(cpu).spinlock); */
 	}
 
 	max_overheads.cxs = 0;
@@ -137,12 +134,13 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 {
 	int ts_idx;	
 	unsigned long curr_max;
-	unsigned long lock_flags;
+	unsigned long irq_flags;
 
 	
 	ts_idx = get_ts_idx(ts, cpu_id);
 
-	spin_lock_irqsave(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
+	/* spin_lock_irqsave(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags); */
+	local_irq_save(irq_flags);
 
 	/* prevent re-ordering of ts_idx = ... */
 	barrier();
@@ -152,12 +150,12 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 	     &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 	     &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)) {
 
-		atomic_set((atomic_t*)&last_seqno, 0);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
 		
-		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
+		/* spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags); */
+		local_irq_restore(irq_flags);
 		return -1;
 	}
         // Here currentTimestamp contains a start event and ts 
@@ -168,12 +166,11 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		 &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		 &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)) {
 
-		atomic_set((atomic_t*)&last_seqno, 0);
 		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_MATCH;
 		max_overhead_table_for(ts_idx, cpu_id).start_ts = *ts;
 		max_overhead_table_for(ts_idx, cpu_id).curr_ts = *ts;
 
-		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
+		local_irq_restore(irq_flags);
 		return -1;
 	}
 
@@ -185,10 +182,7 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
 		  &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		  &&(ts->task_type == TSK_RT)
-		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)
-		   &&(		/* This conditions makes sure we are not going through a hole */
-		      (!atomic_read((atomic_t*)&last_seqno))
-		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
+		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no))
 		 ||
 		 ((max_overhead_table_for(ts_idx, cpu_id).curr_ts.event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
@@ -198,31 +192,29 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		     || ts->event == TS_SEND_RESCHED_END_EVENT
 		     || ts->event == TS_TICK_START_EVENT
 		     || ts->event == TS_TICK_END_EVENT)
-		  &&(		/* This conditions makes sure we are not going through a hole */
-		      (!atomic_read((atomic_t*)&last_seqno))
-		      ||(atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no))
-		  ))) {
-		
-		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
-		max_overhead_table_for(ts_idx, cpu_id).end_ts = *ts;
-		max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_START;
-		barrier();
-		/* prevent re-ordering of curr_max = ... */
-		curr_max = max_overhead_table_for(ts_idx, cpu_id).end_ts.timestamp 
-			- max_overhead_table_for(ts_idx, cpu_id).start_ts.timestamp;
-		barrier();
-		/* prevent re-ordering of if( curr_max > ... */
-		if ( curr_max > max_overhead_table_for(ts_idx, cpu_id).value) {
+		  )) {
 
-			max_overhead_table_for(ts_idx, cpu_id).value = curr_max;
-			spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
-			return ts_idx;
-		}
-		spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
-		return -1;
+
+			max_overhead_table_for(ts_idx, cpu_id).end_ts = *ts;
+			max_overhead_table_for(ts_idx, cpu_id).state = WAIT_FOR_START;
+			barrier();
+			/* prevent re-ordering of curr_max = ... */
+			curr_max = max_overhead_table_for(ts_idx, cpu_id).end_ts.timestamp 
+				- max_overhead_table_for(ts_idx, cpu_id).start_ts.timestamp;
+			barrier();
+			/* prevent re-ordering of if( curr_max > ... */
+			if ( curr_max > max_overhead_table_for(ts_idx, cpu_id).value) {
+
+				max_overhead_table_for(ts_idx, cpu_id).value = curr_max;
+				local_irq_restore(irq_flags);
+				return ts_idx;
+			}
+			local_irq_restore(irq_flags);
+			return -1;
+
 	}
-	spin_unlock_irqrestore(&max_overhead_table_for(ts_idx, cpu_id).spinlock, lock_flags);
-	return -1;
+	local_irq_restore(irq_flags);
+	return -1;	
 }
 
 /* 
@@ -230,11 +222,34 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
  */
 inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct timestamp *_end_ts )
 {
+	
+	int update_r = -1;
+	unsigned long irq_flags;
+	unsigned long lock_flags; 
+	int cpu;
+	int i;
 
-	int update_r;
-	unsigned long lock_flags;
 
-	update_r = update_max_overhead_table(ts, ts->cpu);
+	/* First, check for holes in event stream */
+	if ((atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no)) {
+
+		update_r = update_max_overhead_table(ts, ts->cpu);
+		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
+	} else {
+		/* here we strumbled across a hole, therefore, we reset 
+		 * processing of to WAIT_FOR_START  */
+		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
+		for_each_online_cpu(cpu) {
+			for (i = 0; i < curr_size_for(cpu); i++) {
+				local_irq_save(irq_flags);
+				max_overhead_table_for(i, cpu).state = WAIT_FOR_START;
+				local_irq_restore(irq_flags);
+			}		
+		}
+	}
+
+
+
 
 	if (update_r > -1) {
 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts;
@@ -311,7 +326,9 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 inline int  mt_latency_check(struct timestamp *mt_ts) {
 
 	unsigned long lock_flags;
-	spin_lock_irqsave(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
+	unsigned long irq_flags; 
+
+	local_irq_save(irq_flags);
 	
 	if (mt_ts->timestamp > max_latency_for(mt_ts->cpu).value) {
 		
@@ -320,11 +337,10 @@ inline int  mt_latency_check(struct timestamp *mt_ts) {
 			max_overheads.release_latency = mt_ts->timestamp;
 		}
 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-	
-		spin_unlock_irqrestore(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);
+		local_irq_restore(irq_flags);
 		return 1;
 	} else {
-		spin_unlock_irqrestore(&max_latency_for(mt_ts->cpu).spinlock, lock_flags);	
+		local_irq_restore(irq_flags);
 		return -1;
 	}
 }

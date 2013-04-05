@@ -230,95 +230,95 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 	int i;
 
 
-	/* First, check for holes in event stream */
-	if ((atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no)) {
+	/* /\* First, check for holes in event stream *\/ */
+	/* if ((atomic_read((atomic_t*)&last_seqno) + 1 == ts->seq_no)) { */
+
+	/* 	update_r = update_max_overhead_table(ts, ts->cpu); */
+	/* 	atomic_set((atomic_t*)&last_seqno, ts->seq_no); */
+	/* } else { */
+	/* 	/\* here we strumbled across a hole, therefore, we reset  */
+	/* 	 * processing of to WAIT_FOR_START  *\/ */
+	/* 	atomic_set((atomic_t*)&last_seqno, ts->seq_no); */
+	/* 	for_each_online_cpu(cpu) { */
+	/* 		for (i = 0; i < curr_size_for(cpu); i++) { */
+	/* 			local_irq_save(irq_flags); */
+	/* 			max_overhead_table_for(i, cpu).state = WAIT_FOR_START; */
+	/* 			local_irq_restore(irq_flags); */
+	/* 		}		 */
+	/* 	} */
+	/* } */
+
 
 		update_r = update_max_overhead_table(ts, ts->cpu);
-		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
-	} else {
-		/* here we strumbled across a hole, therefore, we reset 
-		 * processing of to WAIT_FOR_START  */
-		atomic_set((atomic_t*)&last_seqno, ts->seq_no);
-		for_each_online_cpu(cpu) {
-			for (i = 0; i < curr_size_for(cpu); i++) {
-				local_irq_save(irq_flags);
-				max_overhead_table_for(i, cpu).state = WAIT_FOR_START;
-				local_irq_restore(irq_flags);
-			}		
-		}
-	}
-
-
-
 
 	if (update_r > -1) {
 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts;
 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts;
-	
+	}	
 
-		switch (_start_ts->event) {
+	/* 	switch (_start_ts->event) { */
 		
-		case TS_SCHED_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			/* Although we know _start_ts and _end_ts correspond to 
-			 * a maximum value, we need to further add this check to make			
-			 * the per-cpu max overhead value, which _start_ts and _end_ts
-			 * correspond to, is still the global maximum overhead value
-			 * (i.e., among all CPUs).		       
-			 */
-			if (max_overheads.sched < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.sched = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_SCHED_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		/\* Although we know _start_ts and _end_ts correspond to  */
+	/* 		 * a maximum value, we need to further add this check to make			 */
+	/* 		 * the per-cpu max overhead value, which _start_ts and _end_ts */
+	/* 		 * correspond to, is still the global maximum overhead value */
+	/* 		 * (i.e., among all CPUs).		        */
+	/* 		 *\/ */
+	/* 		if (max_overheads.sched < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.sched = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 
-		case TS_SCHED2_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			if (max_overheads.sched2 < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.sched2 = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_SCHED2_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		if (max_overheads.sched2 < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.sched2 = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 
-		case TS_CXS_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			if (max_overheads.cxs < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.cxs = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_CXS_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		if (max_overheads.cxs < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.cxs = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 
-		case TS_RELEASE_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			if (max_overheads.release < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.release = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_RELEASE_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		if (max_overheads.release < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.release = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 			
-		case TS_SEND_RESCHED_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			if (max_overheads.send_resched < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.send_resched = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_SEND_RESCHED_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		if (max_overheads.send_resched < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.send_resched = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 
-		case TS_TICK_START_EVENT: 
-			spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-			if (max_overheads.tick < _end_ts->timestamp - _start_ts->timestamp) {
-				max_overheads.tick = _end_ts->timestamp - _start_ts->timestamp;
-			}
-			spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
-			break;
+	/* 	case TS_TICK_START_EVENT:  */
+	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+	/* 		if (max_overheads.tick < _end_ts->timestamp - _start_ts->timestamp) { */
+	/* 			max_overheads.tick = _end_ts->timestamp - _start_ts->timestamp; */
+	/* 		} */
+	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+	/* 		break; */
 
 
-		default:
-			break;
+	/* 	default: */
+	/* 		break; */
 
-		}
+	/* 	} */
 
-	}
+	/* } */
 
 	return update_r;
 }

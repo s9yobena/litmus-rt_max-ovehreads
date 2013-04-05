@@ -86,8 +86,6 @@ inline void init_max_sched_overhead_trace(void) {
 	max_overheads.send_resched = 0;
 	max_overheads.release_latency = 0;
 	max_overheads.tick = 0;
-
-	spin_lock_init(&max_overheads_spinlock);
 }
 
 static inline void print_all_entries(void) {
@@ -255,70 +253,6 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts;
 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts;
 	}	
-
-	/* 	switch (_start_ts->event) { */
-		
-	/* 	case TS_SCHED_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		/\* Although we know _start_ts and _end_ts correspond to  */
-	/* 		 * a maximum value, we need to further add this check to make			 */
-	/* 		 * the per-cpu max overhead value, which _start_ts and _end_ts */
-	/* 		 * correspond to, is still the global maximum overhead value */
-	/* 		 * (i.e., among all CPUs).		        */
-	/* 		 *\/ */
-	/* 		if (max_overheads.sched < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.sched = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-
-	/* 	case TS_SCHED2_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		if (max_overheads.sched2 < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.sched2 = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-
-	/* 	case TS_CXS_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		if (max_overheads.cxs < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.cxs = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-
-	/* 	case TS_RELEASE_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		if (max_overheads.release < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.release = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-			
-	/* 	case TS_SEND_RESCHED_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		if (max_overheads.send_resched < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.send_resched = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-
-	/* 	case TS_TICK_START_EVENT:  */
-	/* 		spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
-	/* 		if (max_overheads.tick < _end_ts->timestamp - _start_ts->timestamp) { */
-	/* 			max_overheads.tick = _end_ts->timestamp - _start_ts->timestamp; */
-	/* 		} */
-	/* 		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
-	/* 		break; */
-
-
-	/* 	default: */
-	/* 		break; */
-
-	/* 	} */
-
-	/* } */
 
 	return update_r;
 }

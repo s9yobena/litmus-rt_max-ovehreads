@@ -110,25 +110,6 @@ static inline void print_all_entries(void) {
 
 }
 
-static inline int get_ts_idx(struct timestamp *ts, int cpu_id)
-{
-	int i;
-
-	for (i = 0; i < curr_size_for(cpu_id); i++) {
-
-		if (((ts->event == max_overhead_table_for(i, cpu_id).start_id)
-		     ||(ts->event == max_overhead_table_for(i, cpu_id).end_id))
-		    &&(ts->cpu == max_overhead_table_for(i, cpu_id).cpu_id)) {
-
-			return i;
-		}
-	}
-	/* ts must be registered before calling get_ts_idx() */
-	TRACE(KERN_ERR"Timestamp %d is not registered \n",ts->event);
-	BUG();
-	return -1;
-}
-
 
 /* 
  * Check if ts yields a maximum overhead
@@ -257,18 +238,19 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 
 inline int  mt_latency_check(struct timestamp *mt_ts) {
 
-	unsigned long lock_flags;
+	/* unsigned long lock_flags; */
 	unsigned long irq_flags; 
 
 	local_irq_save(irq_flags);
 	
 	if (mt_ts->timestamp > max_latency_for(mt_ts->cpu).value) {
 		
-		spin_lock_irqsave(&max_overheads_spinlock, lock_flags);
-		if (max_overheads.release_latency < mt_ts->timestamp) {
-			max_overheads.release_latency = mt_ts->timestamp;
-		}
-		spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags);
+		/* spin_lock_irqsave(&max_overheads_spinlock, lock_flags); */
+		/* if (max_overheads.release_latency < mt_ts->timestamp) { */
+		/* 	max_overheads.release_latency = mt_ts->timestamp; */
+		/* } */
+		/* spin_unlock_irqrestore(&max_overheads_spinlock, lock_flags); */
+
 		local_irq_restore(irq_flags);
 		return 1;
 	} else {

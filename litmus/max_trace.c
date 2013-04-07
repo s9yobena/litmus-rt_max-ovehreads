@@ -42,17 +42,20 @@ static DEFINE_PER_CPU(unsigned, _curr_size);
 #define curr_size (__get_cpu_var(_curr_size))
 #define curr_size_for(cpu_id) (per_cpu(_curr_size, cpu_id))
 
-static unsigned int last_seqno = 0; /* Used to check for holes in event streams */
+/* static unsigned int last_seqno = 0; /\* Used to check for holes in event streams *\/ */
 
 inline void init_max_sched_overhead_trace(void) {
 	int cpu;
 	int i;
-	static int start_ids[] = {TS_SCHED_START_EVENT, 
-				  TS_SCHED2_START_EVENT,
-				  TS_CXS_START_EVENT,
-				  TS_RELEASE_START_EVENT,
-				  TS_TICK_START_EVENT,
-				  TS_SEND_RESCHED_START_EVENT};
+	/* static int start_ids[] = {TS_SCHED_START_EVENT, */
+	/* 			  TS_SCHED2_START_EVENT, */
+	/* 			  TS_CXS_START_EVENT, */
+	/* 			  TS_RELEASE_START_EVENT, */
+	/* 			  TS_TICK_START_EVENT, */
+	/* 			  TS_SEND_RESCHED_START_EVENT}; */
+
+	static int start_ids[] = { TS_TICK_START_EVENT};
+
 	
 	for_each_online_cpu(cpu) {
 
@@ -118,10 +121,8 @@ static inline int get_ts_idx(struct timestamp *ts, int cpu_id)
 		    &&(ts->cpu == max_overhead_table_for(i, cpu_id).cpu_id)) {
 
 			return i;
-		} 
+		}
 	}
-
-
 	/* ts must be registered before calling get_ts_idx() */
 	TRACE(KERN_ERR"Timestamp %d is not registered \n",ts->event);
 	BUG();
@@ -180,12 +181,12 @@ static inline int update_max_overhead_table(struct timestamp *ts, int cpu_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
 		  &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
 		  &&(ts->task_type == TSK_RT)
-		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no))
+		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no +1 == ts->seq_no))
 		 ||
 		 ((max_overhead_table_for(ts_idx, cpu_id).curr_ts.event == max_overhead_table_for(ts_idx, cpu_id).start_id)
 		  &&(ts->event == max_overhead_table_for(ts_idx, cpu_id).end_id)
 		  &&(ts->cpu == max_overhead_table_for(ts_idx, cpu_id).cpu_id)
-		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no < ts->seq_no)
+		  &&(max_overhead_table_for(ts_idx, cpu_id).curr_ts.seq_no +1 == ts->seq_no)
 		  &&(ts->event == TS_SEND_RESCHED_START_EVENT
 		     || ts->event == TS_SEND_RESCHED_END_EVENT
 		     || ts->event == TS_TICK_START_EVENT
@@ -233,8 +234,14 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 
 	/* 	update_r = update_max_overhead_table(ts, ts->cpu); */
 	/* 	atomic_set((atomic_t*)&last_seqno, ts->seq_no); */
+	/* 	if (update_r > -1) { */
+	/* 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts; */
+	/* 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts; */
+	/* 	}	 */
+
+	/* 	return update_r; */
 	/* } else { */
-	/* 	/\* here we strumbled across a hole, therefore, we reset  */
+	/* 	/\* here we strumbled across a hole, therefore, we reset */
 	/* 	 * processing of to WAIT_FOR_START  *\/ */
 	/* 	atomic_set((atomic_t*)&last_seqno, ts->seq_no); */
 	/* 	for_each_online_cpu(cpu) { */
@@ -242,18 +249,19 @@ inline int mt_check(struct timestamp* ts, struct timestamp *_start_ts, struct ti
 	/* 			local_irq_save(irq_flags); */
 	/* 			max_overhead_table_for(i, cpu).state = WAIT_FOR_START; */
 	/* 			local_irq_restore(irq_flags); */
-	/* 		}		 */
+	/* 		} */
 	/* 	} */
+	/* 	return update_r; */
 	/* } */
 
 
-		update_r = update_max_overhead_table(ts, ts->cpu);
+	update_r = update_max_overhead_table(ts, ts->cpu);
 
 	if (update_r > -1) {
 		*_start_ts = max_overhead_table_for(update_r, ts->cpu).start_ts;
 		*_end_ts = max_overhead_table_for(update_r, ts->cpu).end_ts;
-	}	
-
+	}
+	/* atomic_set((atomic_t*)&last_seqno, ts->seq_no); */
 	return update_r;
 }
 

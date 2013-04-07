@@ -161,6 +161,7 @@ feather_callback void do_sched_trace_action(unsigned long id,
 					    unsigned long action);
 feather_callback void do_sched_trace_sys_release(unsigned long id,
 						 lt_t* start);
+
 feather_callback void do_sched_trace_task_termination(unsigned long id,
 						 struct task_struct* task);
 
@@ -200,9 +201,9 @@ feather_callback void do_sched_trace_task_termination(unsigned long id,
 /* when is a pointer, it does not need an explicit cast to unsigned long */
 #define sched_trace_sys_release(when) \
 	SCHED_TRACE(SCHED_TRACE_BASE_ID + 10, do_sched_trace_sys_release, when)
+
 #define sched_trace_task_termination(t) \
 	SCHED_TRACE(SCHED_TRACE_BASE_ID + 11, do_sched_trace_task_termination, t)
-
 
 #define sched_trace_quantum_boundary() /* NOT IMPLEMENTED */
 

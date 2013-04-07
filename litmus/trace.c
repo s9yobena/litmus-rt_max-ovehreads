@@ -77,16 +77,16 @@ static inline void __save_timestamp_cpu(unsigned long event,
 	mt_check_r = mt_check(&mt_ts, &mt_start_ts, &mt_end_ts);
 
 	if (mt_check_r > -1) {
-		TRACE(KERN_INFO "New maximum overhead %lu \n",
-		       (unsigned long)(mt_end_ts.timestamp - mt_start_ts.timestamp));
-		TRACE(KERN_INFO "id of start ts is: %d \n",
-		      mt_start_ts.event);
-		TRACE(KERN_INFO "timestamp of start ts is: %lu \n",
-		      (unsigned long)mt_start_ts.timestamp);
-		TRACE(KERN_INFO "id of end ts is: %d \n",
-		      mt_end_ts.event);
-		TRACE(KERN_INFO "timestamp of end ts is: %lu \n",
-		       (unsigned long)mt_end_ts.timestamp);
+		/* TRACE(KERN_INFO "New maximum overhead %lu \n", */
+		/*        (unsigned long)(mt_end_ts.timestamp - mt_start_ts.timestamp)); */
+		/* TRACE(KERN_INFO "id of start ts is: %d \n", */
+		/*       mt_start_ts.event); */
+		/* TRACE(KERN_INFO "timestamp of start ts is: %lu \n", */
+		/*       (unsigned long)mt_start_ts.timestamp); */
+		/* TRACE(KERN_INFO "id of end ts is: %d \n", */
+		/*       mt_end_ts.event); */
+		/* TRACE(KERN_INFO "timestamp of end ts is: %lu \n", */
+		/*        (unsigned long)mt_end_ts.timestamp); */
 		/* mt_get_pair_ts(mt_check_r, cpu, &mt_start_ts, &mt_end_ts); */
 		barrier();
 		if (ft_buffer_start_write(trace_ts_buf, (void**)  &ts)) {

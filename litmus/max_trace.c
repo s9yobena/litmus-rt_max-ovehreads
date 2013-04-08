@@ -28,9 +28,6 @@ struct max_latency {
 	uint64_t value;       
 };
 
-struct max_overheads_t max_overheads;
-spinlock_t max_overheads_spinlock;
-
 static DEFINE_PER_CPU(struct max_overhead[MAX_ENTRIES], _max_overhead_table);
 #define max_overhead_table(idx) (__get_cpu_var(_max_overhead_table[(idx)]))
 #define max_overhead_table_for(idx,cpu_id) (per_cpu(_max_overhead_table[(idx)], cpu_id))
@@ -42,15 +39,17 @@ static DEFINE_PER_CPU(unsigned, _curr_size);
 #define curr_size (__get_cpu_var(_curr_size))
 #define curr_size_for(cpu_id) (per_cpu(_curr_size, cpu_id))
 
+static int start_ids[] = {TS_SCHED_START_EVENT,
+			  TS_SCHED2_START_EVENT,
+			  TS_CXS_START_EVENT,
+			  TS_RELEASE_START_EVENT,
+			  TS_TICK_START_EVENT,
+			  TS_SEND_RESCHED_START_EVENT};
+
+
 inline void init_max_sched_overhead_trace(void) {
 	int cpu;
 	int i;
-	static int start_ids[] = {TS_SCHED_START_EVENT,
-				  TS_SCHED2_START_EVENT,
-				  TS_CXS_START_EVENT,
-				  TS_RELEASE_START_EVENT,
-				  TS_TICK_START_EVENT,
-				  TS_SEND_RESCHED_START_EVENT};
 
 	for_each_online_cpu(cpu) {
 
@@ -74,17 +73,30 @@ inline void init_max_sched_overhead_trace(void) {
 		}
 
 		max_latency_for(cpu).value = 0;
-		/* spin_lock_init(&max_latency_for(cpu).spinlock); */
 	}
-
-	max_overheads.cxs = 0;
-	max_overheads.sched = 0;
-	max_overheads.sched2 = 0;
-	max_overheads.release = 0;
-	max_overheads.send_resched = 0;
-	max_overheads.release_latency = 0;
-	max_overheads.tick = 0;
 }
+
+inline void reset_max_sched_overhead_trace(void) {
+	int cpu;
+	int i;
+	unsigned long irq_flags;
+	for_each_online_cpu(cpu) {
+
+		local_irq_save(irq_flags);
+		for (i = 0; i < curr_size_for(cpu); i++) {
+
+			max_overhead_table_for(i, cpu).state = WAIT_FOR_START;
+			max_overhead_table_for(i, cpu).start_id = start_ids[i];
+			max_overhead_table_for(i, cpu).end_id = start_ids[i]+1;
+			max_overhead_table_for(i, cpu).cpu_id = cpu;
+			max_overhead_table_for(i, cpu).value = 0;
+		
+		}
+		max_latency_for(cpu).value = 0;
+		local_irq_restore(irq_flags);
+	}
+}
+
 
 static inline void print_all_entries(void) {
 
